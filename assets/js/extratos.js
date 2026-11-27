@@ -110,7 +110,11 @@ window.VHG_EXTRATOS = (function () {
     }
     paginas.forEach(function (p) { delete p._pagina; });
     await doc.destroy();
-    var info = L.ler(paginas);
+    var info;
+    try { info = L.ler(paginas); }
+    catch (e) { info = { tipo: "", banco: "", transacoes: [], conferencia: { nivel: "erro", msg: "Não consegui ler os lançamentos deste PDF." } }; }
+    // Só na memória desta aba, para o botão "Baixar layout para ajuste". Some ao limpar ou fechar.
+    Object.defineProperty(info, "_paginas", { value: paginas, enumerable: false, configurable: true });
     if (ocr) {
       info.ocr = true;
       info.conferencia.msg = "Lido por reconhecimento de imagem (PDF escaneado ou foto): revise os valores. " + info.conferencia.msg;
@@ -228,7 +232,11 @@ window.VHG_EXTRATOS = (function () {
       var desc = [f.info.tipo === "cartao" ? "Fatura de cartão" : f.info.tipo === "conta" ? "Extrato de conta" : "", f.info.banco, f.info.transacoes.length ? f.info.transacoes.length + " lançamentos" : ""].filter(Boolean).join(" · ");
       return '<div class="ext-arq">' + I.file +
         '<div class="ext-arq-tx"><div class="nome">' + esc(f.nome) + '</div><div class="meta">' + esc(desc) + '</div>' +
-        '<div class="ext-conf ' + (c.nivel || "") + '">' + ic + '<span>' + esc(c.msg || "") + '</span></div></div>' +
+        '<div class="ext-conf ' + (c.nivel || "") + '">' + ic + '<span>' + esc(c.msg || "") + '</span></div>' +
+        (f.info._paginas ? (c.nivel === "ok"
+          ? '<button type="button" class="ext-layout discreto" data-layout="' + i + '">Baixar layout para ajuste</button>'
+          : '<div class="ext-layout-caixa"><button type="button" class="btn btn-linha" data-layout="' + i + '">BAIXAR LAYOUT PARA AJUSTE</button><span>A leitura não fechou. Este arquivo mostra só o formato do PDF, sem nomes nem valores, e serve para ajustarmos a leitura deste banco.</span></div>') : "") +
+        '</div>' +
         '<button type="button" class="ext-remover" data-remover="' + i + '" aria-label="Remover ' + esc(f.nome) + '">' + I.x + '</button></div>';
     }).join("");
     return (estado.pendenteSenha ? caixaSenha() : "") +
@@ -409,6 +417,14 @@ window.VHG_EXTRATOS = (function () {
     });
     on("[data-cancelar-senha]", "click", function () { estado.pendenteSenha = null; render(); });
     on("[data-limpar]", "click", limpar);
+    on("[data-layout]", "click", function (e, b) {
+      var f = estado.arquivos[+b.dataset.layout];
+      if (!f || !f.info._paginas) return;
+      var info = f.info, c = info.conferencia || {};
+      var dados = L.disfarcar(info._paginas, { tipo: info.tipo || "", banco: info.banco || "", lancamentos: info.transacoes.length, conferencia: c.nivel || "", ocr: !!info.ocr });
+      var slug = (info.banco || "extrato").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+      baixarBlob(new Blob([JSON.stringify(dados)], { type: "application/json" }), "layout-" + slug + "-" + new Date().toISOString().slice(0, 10) + ".json");
+    });
     on("[data-remover]", "click", function (e, b) {
       var i = +b.dataset.remover;
       estado.arquivos.splice(i, 1);
