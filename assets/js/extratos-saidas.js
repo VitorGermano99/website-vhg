@@ -52,7 +52,7 @@ window.VHG_EXTRATOS_SAIDAS = (function () {
     if (a.totalReceitas) L.push("Entradas .............. " + padL(brl(a.totalReceitas), 16));
     L.push("Gastos ................ " + padL(brl(a.totalGastos), 16));
     if (a.investido) L.push("Investido ............. " + padL(brl(a.investido), 16));
-    if (a.totalEstornos) L.push("Estornos e créditos ... " + padL(brl(a.totalEstornos), 16));
+    if (a.totalEstornos) L.push("Estornos e créditos ... " + padL(brl(a.totalEstornos), 16) + (a.estornosAbatidos ? "  (já descontados dos gastos)" : ""));
     if (a.sobra !== null) L.push("Sobra ................. " + padL(brl(a.sobra), 16));
     L.push("", "-".repeat(W), pad("DATA", 12) + pad("DESCRIÇÃO", 44) + pad("CATEGORIA", 22) + padL("VALOR", 22), "-".repeat(W));
     d.trans.forEach(function (t) {
@@ -94,32 +94,32 @@ window.VHG_EXTRATOS_SAIDAS = (function () {
     // Lançamentos
     wsT.getCell("A1").value = "Lançamentos · " + d.periodo; wsT.getCell("A1").font = fT;
     wsT.getCell("A2").value = (d.cliente ? d.cliente + " · " : "") + d.arquivos.map(function (f) { return f.banco || f.nome; }).join(", "); wsT.getCell("A2").font = fS;
-    cab(wsT, 4, ["Data", "Descrição", "Categoria", "Documento", "Banco", "Mês", "Parcela", "Valor"]);
+    cab(wsT, 4, ["Data", "Descrição", "Categoria", "Documento", "Banco", "Mês", "Parcela", "Valor", "Estorno abate em"]);
     var r0 = 5;
     d.trans.forEach(function (t, i) {
       var f = d.arquivos[t.arquivo] || {}, p = t.data.split("-");
       var row = wsT.getRow(r0 + i);
-      row.values = [new Date(Date.UTC(+p[0], +p[1] - 1, +p[2])), t.descricao, t.categoria, tipoDoc(f.tipo), f.banco || "", t.competencia, t.parcela ? t.parcela.atual + "/" + t.parcela.total : "", t.valor];
+      row.values = [new Date(Date.UTC(+p[0], +p[1] - 1, +p[2])), t.descricao, t.categoria, tipoDoc(f.tipo), f.banco || "", t.competencia, t.parcela ? t.parcela.atual + "/" + t.parcela.total : "", t.valor, t.abateu ? t.abateu.categoria : ""];
       row.eachCell({ includeEmpty: true }, function (c) { c.font = fB; c.border = borda; });
       row.getCell(1).numFmt = "dd/mm/yyyy"; row.getCell(8).numFmt = MOEDA;
       if (t.categoria === "A revisar") row.eachCell({ includeEmpty: true }, function (c) { c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFF4D6" } }; });
     });
     var rN = r0 + Math.max(0, d.trans.length - 1);
-    [12, 42, 22, 18, 14, 10, 9, 15].forEach(function (w, i) { wsT.getColumn(i + 1).width = w; });
+    [12, 42, 22, 18, 14, 10, 9, 15, 20].forEach(function (w, i) { wsT.getColumn(i + 1).width = w; });
     wsT.views = [{ state: "frozen", ySplit: 4 }];
-    wsT.autoFilter = { from: "A4", to: "H" + rN };
-    var CAT = "'Lançamentos'!$C$" + r0 + ":$C$" + rN, VAL = "'Lançamentos'!$H$" + r0 + ":$H$" + rN;
+    wsT.autoFilter = { from: "A4", to: "I" + rN };
+    var CAT = "'Lançamentos'!$C$" + r0 + ":$C$" + rN, VAL = "'Lançamentos'!$H$" + r0 + ":$H$" + rN, ABATE = "'Lançamentos'!$I$" + r0 + ":$I$" + rN;
 
     // Por categoria
     wsC.getCell("A1").value = "Gastos por categoria"; wsC.getCell("A1").font = fT;
-    wsC.getCell("A2").value = "Calculado a partir da aba Lançamentos. Troque uma categoria lá e tudo aqui se atualiza."; wsC.getCell("A2").font = fS;
+    wsC.getCell("A2").value = "Calculado a partir da aba Lançamentos. Troque uma categoria lá e tudo aqui se atualiza. Estornos já descontados da categoria da compra."; wsC.getCell("A2").font = fS;
     cab(wsC, 4, ["Categoria", "Lançamentos", "Total", "% dos gastos"]);
     var rt = 5 + a.cats.length;
     a.cats.forEach(function (c, i) {
       var r = 5 + i, row = wsC.getRow(r);
       row.getCell(1).value = c.categoria;
       row.getCell(2).value = { formula: 'COUNTIFS(' + CAT + ',A' + r + ',' + VAL + ',"<0")', result: c.n };
-      row.getCell(3).value = { formula: '-SUMIFS(' + VAL + ',' + CAT + ',A' + r + ',' + VAL + ',"<0")', result: c.total };
+      row.getCell(3).value = { formula: '-SUMIFS(' + VAL + ',' + CAT + ',A' + r + ',' + VAL + ',"<0")-SUMIFS(' + VAL + ',' + ABATE + ',A' + r + ')', result: c.total };
       row.getCell(4).value = { formula: 'IF($C$' + rt + '=0,0,C' + r + '/$C$' + rt + ')', result: c.pct / 100 };
       row.getCell(3).numFmt = MOEDA; row.getCell(4).numFmt = PCT;
       row.eachCell(function (x) { x.font = fB; x.border = borda; });
@@ -283,7 +283,7 @@ window.VHG_EXTRATOS_SAIDAS = (function () {
     y += 2;
     var ks = a.modoRenda
       ? [["ENTRADAS", brl(a.totalReceitas), "Salário, PIX e depósitos"], ["GASTOS", brl(a.totalGastos), n1(a.totalGastos / a.totalReceitas * 100) + "% do que entrou"], ["INVESTIDO", brl(a.investido), "Aplicações no período"], ["SOBRA", brl(a.sobra), n1(a.sobra / a.totalReceitas * 100) + "% da renda · referência: 20%", 1]]
-      : [["GASTOS", brl(a.totalGastos), a.nGastos + " lançamentos"], ["ESTORNOS E CRÉDITOS", brl(a.totalEstornos), "Devoluções e créditos"], ["PARCELAS A VENCER", brl(a.totalParcelasFuturas), a.parcelas.length + " compras parceladas"], ["ASSINATURAS", brl(a.totalAssinaturas / Math.max(1, a.meses.length)), "por mês", 1]];
+      : [["GASTOS", brl(a.totalGastos), a.nGastos + " lançamentos"], ["ESTORNOS E CRÉDITOS", brl(a.totalEstornos), a.estornosAbatidos ? "Já descontados dos gastos" : "Devoluções e créditos"], ["PARCELAS A VENCER", brl(a.totalParcelasFuturas), a.parcelas.length + " compras parceladas"], ["ASSINATURAS", brl(a.totalAssinaturas / Math.max(1, a.meses.length)), "por mês", 1]];
     var kw = (CW - 5) / 2;
     ks.forEach(function (k, i) {
       var x = M + (i % 2) * (kw + 5), yy = y + Math.floor(i / 2) * 27;

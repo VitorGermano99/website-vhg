@@ -300,6 +300,16 @@
     var mesFatura = venc ? venc[3] + "-" + String(MESES[String(venc[2]).toUpperCase()] || +venc[2]).padStart(2, "0") : null;
     trans.forEach(function (t) { t.competencia = tipo === "cartao" && mesFatura ? mesFatura : t.data.slice(0, 7); });
 
+    // Parcela antiga (ex.: 12/12) sem ano na fatura: a compra foi feita uns (atual - 1) meses antes da fatura,
+    // então volta o ano até a data ficar coerente com o número da parcela
+    if (tipo === "cartao") trans.forEach(function (t) {
+      if (!t.parcela || t.parcela.atual < 2) return;
+      var c = t.competencia.split("-"), mc = +c[0] * 12 + +c[1];
+      var y = +t.data.slice(0, 4), m = +t.data.slice(5, 7), esperado = t.parcela.atual - 1;
+      while (mc - (y * 12 + m) < esperado - 2 && y > 2000) y--;
+      t.data = y + t.data.slice(4);
+    });
+
     var parte = /folha:?\s*(\d+)\s*\/\s*(\d+)/.exec(tn);
     var info = {
       tipo: tipo, banco: detectarBanco(todoTexto), transacoes: trans, referencia: ref, vencimento: mesFatura,
@@ -328,7 +338,7 @@
       var ant = resumo.filter(function (r) { return /fatura anterior|saldo anterior/.test(r.t); })[0];
       if (ant) {
         var tot = Math.abs(ant.vals[ant.vals.length - 1]) + liquido - pagos;
-        if (cand.some(function (c) { return quase(c.v, tot); })) return { ok: true, nivel: "ok", msg: "Total a pagar conferido com a fatura: " + brl(tot) + ".", total: liquido };
+        if (cand.some(function (c) { return quase(c.v, tot); })) return { ok: true, nivel: "ok", msg: "Total a pagar conferido com a fatura: " + brl(tot) + (pagos ? " (compras de " + brl(liquido) + " menos pagamentos já feitos de " + brl(pagos) + (Math.abs(ant.vals[ant.vals.length - 1]) ? ", mais a fatura anterior" : "") + ")" : "") + ".", total: liquido };
       }
       return { ok: false, nivel: "aviso", msg: "Não consegui achar o total da fatura para conferir. Some lida: " + brl(liquido) + ". Confira com o total impresso.", total: liquido };
     }
