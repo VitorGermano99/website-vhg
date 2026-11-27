@@ -26,7 +26,7 @@ window.VHG_EXTRATOS = (function () {
   };
 
   var el, estado = novoEstado();
-  function novoEstado() { return { arquivos: [], trans: [], cliente: "", aba: "analise", filtro: "", busca: "", processando: null, pendenteSenha: null, regraSugerida: null }; }
+  function novoEstado() { return { arquivos: [], trans: [], cliente: "", aba: "analise", filtro: "", busca: "", processando: null, pendenteSenha: null, regraSugerida: null, buscaRegra: "" }; }
 
   function esc(s) { return String(s === undefined || s === null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
   var brl = C.brl, n1 = C.n1;
@@ -262,11 +262,11 @@ window.VHG_EXTRATOS = (function () {
     var k = [];
     if (a.modoRenda) {
       k.push(["ENTRADAS", brl0(a.totalReceitas), "Salário, PIX e depósitos"]);
-      k.push(["GASTOS", brl0(a.totalGastos), a.nGastos + " lançamentos"]);
+      k.push(["GASTOS", brl0(a.totalGastos), a.nGastos + " lançamentos" + (a.estornosAbatidos ? " · já sem os estornos" : "")]);
       k.push(["INVESTIDO", brl0(a.investido), "Aplicações no período"]);
       k.push(["SOBRA", brl0(a.sobra), n1(a.sobra / a.totalReceitas * 100) + "% da renda", true]);
     } else {
-      k.push(["GASTOS", brl0(a.totalGastos), a.nGastos + " lançamentos"]);
+      k.push(["GASTOS", brl0(a.totalGastos), a.nGastos + " lançamentos" + (a.estornosAbatidos ? " · já sem os estornos" : "")]);
       k.push([a.meses.length > 1 ? "MÉDIA POR MÊS" : "MAIOR CATEGORIA", a.meses.length > 1 ? brl0(a.mediaMensalGastos) : (a.cats[0] ? brl0(a.cats[0].total) : "—"), a.meses.length > 1 ? a.meses.length + " meses" : (a.cats[0] ? a.cats[0].categoria : "")]);
       k.push(["PARCELAS A VENCER", brl0(a.totalParcelasFuturas), a.parcelas.length + " compras parceladas"]);
       k.push(["ASSINATURAS", brl0(a.totalAssinaturas / Math.max(1, a.meses.length)), "por mês", true]);
@@ -293,7 +293,7 @@ window.VHG_EXTRATOS = (function () {
       a.parcelas.slice(0, 12).map(function (p) { return '<tr><td>' + esc(p.t.descricao) + '</td><td class="c">' + p.t.parcela.atual + ' de ' + p.t.parcela.total + '</td><td class="v">' + brl(-p.t.valor) + '</td><td class="v">' + brl(p.restante) + '</td></tr>'; }).join("") +
       '<tr class="tot"><td>Total</td><td></td><td></td><td class="v">' + brl(a.totalParcelasFuturas) + '</td></tr></table></div>' : "";
     return '<div class="ext-periodo">' + esc(periodo(a)) + '</div>' + kpis(a) +
-      '<div class="bloco ext-bloco"><div class="eyebrow" style="letter-spacing:.22em">POR CATEGORIA</div><h3>Para onde foi o dinheiro</h3><div class="ext-barras">' + barras + '</div><div class="pequeno" style="margin-top:12px">Clique numa categoria para ver os lançamentos.</div></div>' +
+      '<div class="bloco ext-bloco"><div class="eyebrow" style="letter-spacing:.22em">POR CATEGORIA</div><h3>Para onde foi o dinheiro</h3><div class="ext-barras">' + barras + '</div><div class="pequeno" style="margin-top:12px">Clique numa categoria para ver os lançamentos e trocar a categoria de qualquer um deles.</div></div>' +
       meses +
       (a.destaques.length ? '<div class="bloco ext-bloco"><div class="eyebrow" style="letter-spacing:.22em">LEITURA AUTOMÁTICA</div><h3>O que chama atenção</h3><div class="ext-insights">' + a.destaques.map(function (d) { return '<div class="ext-insight"><div class="t">' + d.t + '</div>' + d.h + '</div>'; }).join("") + '</div></div>' : "") +
       '<div class="ext-dois"><div class="bloco ext-bloco"><div class="eyebrow" style="letter-spacing:.22em">MAIORES GASTOS</div><table class="ext-mini">' + top + '</table></div>' +
@@ -325,8 +325,10 @@ window.VHG_EXTRATOS = (function () {
         '<td><select data-cat="' + t.id + '" aria-label="Categoria">' + opcoesCategoria(t.categoria) + '</select></td>' +
         '<td class="v' + (t.valor > 0 ? " pos" : "") + '">' + brl(t.valor).replace("R$", t.valor > 0 ? "+R$" : "R$") + '</td></tr>' + sug;
     }).join("");
+    var mover = (estado.filtro || q) && lista.length ? '<form class="ext-mover" data-mover>Mover ' + (lista.length > 1 ? 'os <b>' + lista.length + ' lançamentos</b> desta lista' : 'este lançamento') + ' para <select id="ext-mover-cat" aria-label="Nova categoria">' + opcoesCategoria(estado.filtro === "A revisar" || !estado.filtro ? "Outros" : estado.filtro) + '</select><button type="submit" class="btn btn-petroleo">MOVER</button></form>' : "";
     return '<div class="ext-filtros">' + filtros + '</div>' +
-      '<input type="search" class="ext-busca" data-busca placeholder="Buscar descrição" value="' + esc(estado.busca) + '">' +
+      '<div class="pequeno ext-dica">Todas as categorias podem ser trocadas, inclusive as que a ferramenta já definiu: escolha outra na coluna CATEGORIA. Para trocar várias de uma vez, filtre ou busque e use <b>Mover</b>.</div>' +
+      '<input type="search" class="ext-busca" data-busca placeholder="Buscar descrição" value="' + esc(estado.busca) + '">' + mover +
       '<div class="bloco ext-bloco ext-tabela-wrap"><table class="ext-tab"><thead><tr><th>DATA</th><th>DESCRIÇÃO</th><th>CATEGORIA</th><th class="v">VALOR</th></tr></thead><tbody>' +
       (linhas || '<tr><td colspan="4" class="c">Nenhum lançamento neste filtro.</td></tr>') + '</tbody></table></div>';
   }
@@ -347,7 +349,27 @@ window.VHG_EXTRATOS = (function () {
       '<div class="ext-regras">' + lista + '</div>' +
       '<form class="ext-nova-regra" data-nova-regra><input type="text" id="ext-nova-palavra" placeholder="Palavra-chave, ex.: PADARIA DA ESQUINA" required><select id="ext-nova-cat">' + opcoesCategoria("Alimentação fora") + '</select><button type="submit" class="btn btn-petroleo">ADICIONAR</button></form>' +
       '<div class="ext-regras-acoes"><button type="button" class="btn btn-linha" data-exportar-regras>EXPORTAR REGRAS</button><label class="btn btn-linha" for="ext-importar">IMPORTAR REGRAS</label><input type="file" id="ext-importar" accept=".json" hidden></div>' +
-      '<div class="pequeno" style="margin-top:10px">Use exportar e importar para levar suas regras para outro computador.</div></div>';
+      '<div class="pequeno" style="margin-top:10px">Use exportar e importar para levar suas regras para outro computador.</div></div>' +
+      telaRegrasProntas(us);
+  }
+
+  // Regras prontas: dá para trocar a categoria de qualquer uma. A troca vira uma regra sua, que vale antes da pronta.
+  function telaRegrasProntas(us) {
+    var minhas = {};
+    us.forEach(function (r) { minhas[r[0]] = r[1]; });
+    var q = estado.buscaRegra.trim().toUpperCase();
+    var achadas = C.REGRAS.filter(function (r) { return !q || r[0].indexOf(q) >= 0 || r[1].toUpperCase().indexOf(q) >= 0; });
+    var mostrar = achadas.slice(0, 60);
+    var lista = mostrar.map(function (r) {
+      var p = r[0], atual = minhas[p] || r[1], mudou = !!minhas[p] && minhas[p] !== r[1];
+      return '<div class="ext-regra"><code>' + esc(p.trim()) + '</code>' + (mudou ? '<em class="ext-mudou">era ' + esc(r[1]) + '</em>' : "") +
+        '<select data-trocar-pronta="' + esc(p) + '" aria-label="Categoria de ' + esc(p.trim()) + '">' + opcoesCategoria(atual) + '</select></div>';
+    }).join("");
+    return '<div class="bloco ext-bloco"><div class="eyebrow" style="letter-spacing:.22em">REGRAS PRONTAS</div><h3>Trocar uma categoria já definida</h3>' +
+      '<div class="texto-apoio" style="margin-bottom:14px">São as ' + C.REGRAS.length + ' regras que já vêm com a ferramenta. Busque pela palavra ou pela categoria e escolha outra categoria: a troca vira uma regra sua e passa a valer em todos os extratos. Para voltar ao original, apague a regra em Suas regras.</div>' +
+      '<input type="search" class="ext-busca" data-busca-regra placeholder="Buscar, ex.: SMARTFIT ou Saúde" value="' + esc(estado.buscaRegra) + '">' +
+      '<div class="ext-regras">' + (lista || '<div class="pequeno">Nenhuma regra pronta com essa busca.</div>') + '</div>' +
+      (achadas.length > mostrar.length ? '<div class="pequeno">Mostrando ' + mostrar.length + ' de ' + achadas.length + '. Refine a busca para ver as outras.</div>' : "") + '</div>';
   }
 
   function ladoPrivacidade() {
@@ -422,6 +444,26 @@ window.VHG_EXTRATOS = (function () {
         categorizarTudo();
       }
       estado.regraSugerida = null; render();
+    });
+    on("[data-mover]", "submit", function (e) {
+      e.preventDefault();
+      var c = el.querySelector("#ext-mover-cat").value, q = estado.busca.toUpperCase();
+      estado.trans.forEach(function (t) {
+        if ((!estado.filtro || t.categoria === estado.filtro) && (!q || (t.original + " " + t.descricao).toUpperCase().indexOf(q) >= 0)) { t.categoria = c; t.manual = true; }
+      });
+      estado.filtro = c; estado.regraSugerida = null; render();
+    });
+    on("[data-trocar-pronta]", "change", function (e, s) {
+      var p = s.dataset.trocarPronta, c = s.value;
+      var orig = C.REGRAS.filter(function (r) { return r[0] === p; })[0];
+      var us = C.regrasDoUsuario().filter(function (r) { return r[0] !== p; });
+      if (!orig || orig[1] !== c) us.unshift([p, c]);
+      C.salvarRegras(us); categorizarTudo(); render();
+    });
+    var buscaR = el.querySelector("[data-busca-regra]");
+    if (buscaR) buscaR.addEventListener("input", function () {
+      estado.buscaRegra = buscaR.value; var pos = buscaR.selectionStart; render();
+      var nb = el.querySelector("[data-busca-regra]"); nb.focus(); nb.setSelectionRange(pos, pos);
     });
     on("[data-so-este]", "click", function () { estado.regraSugerida = null; render(); });
     on("[data-apagar-regra]", "click", function (e, b) {

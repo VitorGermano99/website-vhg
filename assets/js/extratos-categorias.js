@@ -117,6 +117,8 @@
         // receitas/estornos só fazem sentido como entrada; o inverso também
         if ((c === "Receitas" || c === "Estornos e créditos") && t.valor < 0) continue;
         if (c === "Pagamento de fatura" && t.tipoDoc === "cartao" && t.valor < 0) continue;
+        // valor positivo numa categoria de gasto (ex.: crédito parcial de uma loja) é devolução
+        if (t.valor > 0 && !NAO_GASTO[c] && c !== "Transferências" && c !== "Saques") c = "Estornos e créditos";
         return { categoria: c, regra: todas[i][0], doUsuario: i < (usuario || []).length };
       }
     }
@@ -137,12 +139,35 @@
     return chave(s).replace(/\d+/g, "").replace(/[^A-Z ]/g, " ").replace(/\s+/g, " ").trim().split(" ").slice(0, 2).join(" ");
   }
 
+  function baseEstorno(s) {
+    return chaveComercio(chave(s).replace(/^ (ESTORNO|EST|CANCELAMENTO|CANC|DEVOLUCAO|CREDITO|CRED)( DE| DA| DO| REF)?\b/, " "));
+  }
+  function prefixo(a, b) { var i = 0; while (i < a.length && a[i] === b[i]) i++; return i; }
+
   function analisar(trans) {
     var gastos = trans.filter(function (t) { return t.valor < 0 && !NAO_GASTO[t.categoria]; });
     var estornos = trans.filter(function (t) { return t.categoria === "Estornos e créditos"; });
     var receitas = trans.filter(function (t) { return t.valor > 0 && t.categoria === "Receitas"; });
     var investido = r2(-trans.filter(function (t) { return t.categoria === "Investimentos"; }).reduce(function (a, t) { return a + t.valor; }, 0));
-    var totalGastos = r2(-gastos.reduce(function (a, t) { return a + t.valor; }, 0));
+    // Estorno abate o gasto que ele devolve (mesma loja), na categoria dessa compra.
+    // Assim o total de gastos bate com o total da fatura e uma parcela estornada não conta como parcela futura.
+    var abatePorCat = {}, abatido = 0;
+    gastos.forEach(function (g) { delete g.estornado; });
+    estornos.forEach(function (e) {
+      delete e.abateu;
+      if (!(e.valor > 0)) return;
+      var be = baseEstorno(e.original), p1 = be.split(" ")[0];
+      if (!p1) return;
+      var cands = gastos.filter(function (g) { return baseEstorno(g.original).split(" ")[0] === p1; });
+      if (!cands.length) return;
+      var g = cands.filter(function (x) { return Math.abs(-x.valor - e.valor) < 0.005; })[0] ||
+        cands.sort(function (a, b) { return prefixo(baseEstorno(b.original), be) - prefixo(baseEstorno(a.original), be); })[0];
+      abatePorCat[g.categoria] = r2((abatePorCat[g.categoria] || 0) + e.valor);
+      abatido = r2(abatido + e.valor);
+      e.abateu = g;
+      if (g.parcela && Math.abs(-g.valor - e.valor) < 0.005) g.estornado = true;
+    });
+    var totalGastos = r2(-gastos.reduce(function (a, t) { return a + t.valor; }, 0) - abatido);
     var totalEstornos = r2(estornos.reduce(function (a, t) { return a + t.valor; }, 0));
     var totalReceitas = r2(receitas.reduce(function (a, t) { return a + t.valor; }, 0));
     var meses = {}; trans.forEach(function (t) { meses[t.competencia] = 1; });
@@ -150,17 +175,20 @@
 
     var porCat = {};
     gastos.forEach(function (t) { var c = porCat[t.categoria] || (porCat[t.categoria] = { categoria: t.categoria, total: 0, n: 0 }); c.total = r2(c.total - t.valor); c.n++; });
+    Object.keys(abatePorCat).forEach(function (k) { if (porCat[k]) porCat[k].total = r2(porCat[k].total - abatePorCat[k]); });
+    Object.keys(porCat).forEach(function (k) { if (porCat[k].total <= 0.004) delete porCat[k]; });
     var cats = Object.keys(porCat).map(function (k) { return porCat[k]; }).sort(function (a, b) { return b.total - a.total; });
     cats.forEach(function (c) { c.pct = totalGastos ? c.total / totalGastos * 100 : 0; c.pctRenda = totalReceitas ? c.total / totalReceitas * 100 : null; });
 
     var porMes = meses.map(function (m) {
       var g = gastos.filter(function (t) { return t.competencia === m; });
       var e = receitas.filter(function (t) { return t.competencia === m; });
-      return { mes: m, gastos: r2(-g.reduce(function (a, t) { return a + t.valor; }, 0)), entradas: r2(e.reduce(function (a, t) { return a + t.valor; }, 0)) };
+      var ab = estornos.filter(function (t) { return t.abateu && t.competencia === m; }).reduce(function (a, t) { return a + t.valor; }, 0);
+      return { mes: m, gastos: r2(-g.reduce(function (a, t) { return a + t.valor; }, 0) - ab), entradas: r2(e.reduce(function (a, t) { return a + t.valor; }, 0)) };
     });
 
     // Parcelas: o que ainda falta pagar
-    var parcelas = gastos.filter(function (t) { return t.parcela; }).map(function (t) {
+    var parcelas = gastos.filter(function (t) { return t.parcela && !t.estornado; }).map(function (t) {
       return { t: t, faltam: t.parcela.total - t.parcela.atual, restante: r2(-t.valor * (t.parcela.total - t.parcela.atual)) };
     }).sort(function (a, b) { return b.restante - a.restante; });
     var totalParcelasFuturas = r2(parcelas.reduce(function (a, p) { return a + p.restante; }, 0));
@@ -212,7 +240,7 @@
     if (revisar.length) ins.push({ t: "A REVISAR", h: "<b>" + revisar.length + (revisar.length > 1 ? " lançamentos ficaram" : " lançamento ficou") + " sem categoria</b>. Vale classificar antes de baixar o PDF." });
 
     return {
-      modoRenda: modoRenda, meses: meses, porMes: porMes, cats: cats, totalGastos: totalGastos, totalReceitas: totalReceitas, totalEstornos: totalEstornos, investido: investido,
+      modoRenda: modoRenda, meses: meses, porMes: porMes, cats: cats, totalGastos: totalGastos, totalReceitas: totalReceitas, totalEstornos: totalEstornos, estornosAbatidos: abatido, investido: investido,
       sobra: totalReceitas ? r2(totalReceitas - totalGastos) : null, top: top, parcelas: parcelas, totalParcelasFuturas: totalParcelasFuturas,
       recorrentes: recorr, totalRecorrentes: totalRecorrentes, assinaturas: assinaturas, totalAssinaturas: totalAssin, revisar: revisar,
       destaques: ins, nGastos: gastos.length, mediaMensalGastos: media(totalGastos)
