@@ -241,8 +241,8 @@
     if (parcelas.length) ins.push({ t: "PARCELAS", h: "<b>" + parcelas.length + " compras parceladas</b> em andamento. Ainda faltam <b>" + brl(totalParcelasFuturas) + "</b> nas próximas faturas." });
     var modoRenda = totalReceitas > 0 && totalReceitas >= totalGastos * 0.2; // só faz sentido com extrato de conta que traz a renda
     if (modoRenda) {
-      var sobra = r2(totalReceitas - totalGastos);
-      ins.push({ t: "SOBRA", h: "Entrou " + brl(totalReceitas) + " e saíram " + brl(totalGastos) + " em gastos. " + (sobra >= 0 ? "Sobrou <b>" + brl(sobra) + "</b> (" + n1(sobra / totalReceitas * 100) + "% da renda)." : "Faltaram <b>" + brl(-sobra) + "</b>.") });
+      var sobra = r2(totalReceitas - totalGastos - investido);
+      ins.push({ t: "RESULTADO", h: "Entrou " + brl(totalReceitas) + " e saíram " + brl(totalGastos) + " em gastos" + (investido > 0 ? ", mais " + brl(investido) + " investidos" : investido < 0 ? "; " + brl(-investido) + " voltaram de investimentos" : "") + ". " + (sobra >= 0 ? "Sobraram <b>" + brl(sobra) + "</b> na conta." : "Saíram <b>" + brl(-sobra) + "</b> a mais do que entrou, e o saldo da conta caiu nesse valor.") });
     }
     var tarifas = porCat["Tarifas e juros"];
     if (tarifas && tarifas.total > 0) ins.push({ t: "TARIFAS E JUROS", h: "Foram <b>" + brl(tarifas.total) + "</b> em tarifas, juros e encargos. Vale ver se dá para renegociar ou evitar." });
@@ -252,7 +252,8 @@
 
     return {
       modoRenda: modoRenda, meses: meses, porMes: porMes, cats: cats, totalGastos: totalGastos, totalReceitas: totalReceitas, totalEstornos: totalEstornos, estornosAbatidos: abatido, investido: investido,
-      sobra: totalReceitas ? r2(totalReceitas - totalGastos) : null, top: top, parcelas: parcelas, totalParcelasFuturas: totalParcelasFuturas,
+      // sobra = o que ficou na conta (bate com a variação do saldo); poupanca = renda menos gastos (inclui o que foi investido)
+      sobra: totalReceitas ? r2(totalReceitas - totalGastos - investido) : null, poupanca: totalReceitas ? r2(totalReceitas - totalGastos) : null, top: top, parcelas: parcelas, totalParcelasFuturas: totalParcelasFuturas,
       recorrentes: recorr, totalRecorrentes: totalRecorrentes, assinaturas: assinaturas, totalAssinaturas: totalAssin, revisar: revisar,
       destaques: ins, nGastos: gastos.length, mediaMensalGastos: media(totalGastos)
     };

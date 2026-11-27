@@ -266,13 +266,22 @@ window.VHG_EXTRATOS = (function () {
     return a.meses.length === 1 ? C.nomeMes(a.meses[0]) : C.nomeMes(a.meses[0]) + " a " + C.nomeMes(a.meses[a.meses.length - 1]);
   }
 
+  // Soma os saldos dos extratos de conta (só quando todos trazem saldo inicial e final)
+  function somaSaldos(lista) {
+    var com = lista.filter(Boolean);
+    if (!com.length || com.some(function (s) { return s.inicial === null || s.final === null; })) return null;
+    return { inicial: Math.round(com.reduce(function (a, s) { return a + s.inicial; }, 0) * 100) / 100, final: Math.round(com.reduce(function (a, s) { return a + s.final; }, 0) * 100) / 100 };
+  }
+
   function kpis(a) {
     var k = [];
     if (a.modoRenda) {
       k.push(["ENTRADAS", brl0(a.totalReceitas), "Salário, PIX e depósitos"]);
       k.push(["GASTOS", brl0(a.totalGastos), a.nGastos + " lançamentos" + (a.estornosAbatidos ? " · já sem os estornos" : "")]);
       k.push(a.investido < 0 ? ["RESGATADO", brl0(-a.investido), "Resgates maiores que as aplicações"] : ["INVESTIDO", brl0(a.investido), "Aplicações no período"]);
-      k.push(["SOBRA", brl0(a.sobra), n1(a.sobra / a.totalReceitas * 100) + "% da renda", true]);
+      var sd = somaSaldos(estado.arquivos.map(function (f) { return f.info.saldos; }));
+      if (sd) k.push(["FICOU NA CONTA", brl(sd.final), "Começou com " + brl(sd.inicial) + " · " + (a.sobra >= 0 ? "+" : "") + brl(a.sobra) + " no período", true]);
+      else k.push(["SOBRA", brl0(a.sobra), n1(a.poupanca / a.totalReceitas * 100) + "% da renda guardada", true]);
     } else {
       k.push(["GASTOS", brl0(a.totalGastos), a.nGastos + " lançamentos" + (a.estornosAbatidos ? " · já sem os estornos" : "")]);
       k.push([a.meses.length > 1 ? "MÉDIA POR MÊS" : "MAIOR CATEGORIA", a.meses.length > 1 ? brl0(a.mediaMensalGastos) : (a.cats[0] ? brl0(a.cats[0].total) : "—"), a.meses.length > 1 ? a.meses.length + " meses" : (a.cats[0] ? a.cats[0].categoria : "")]);
