@@ -57,7 +57,7 @@ window.VHG_EXTRATOS_SAIDAS = (function () {
     L.push("");
     if (a.totalReceitas) L.push("Entradas .............. " + padL(brl(a.totalReceitas), 16));
     L.push("Gastos ................ " + padL(brl(a.totalGastos), 16));
-    if (a.investido) L.push("Investido ............. " + padL(brl(a.investido), 16));
+    if (a.investido) L.push((a.investido < 0 ? "Resgatado ............. " : "Investido ............. ") + padL(brl(Math.abs(a.investido)), 16));
     if (a.totalEstornos) L.push("Estornos e créditos ... " + padL(brl(a.totalEstornos), 16) + (a.estornosAbatidos ? "  (já descontados dos gastos)" : ""));
     if (a.sobra !== null) L.push("Sobra ................. " + padL(brl(a.sobra), 16));
     L.push("", "-".repeat(W), pad("DATA", 12) + pad("DESCRIÇÃO", 44) + pad("CATEGORIA", 22) + padL("VALOR", 22), "-".repeat(W));
@@ -145,7 +145,7 @@ window.VHG_EXTRATOS_SAIDAS = (function () {
     var linhas = [
       ["Entradas (receitas)", 'SUMIFS(' + VAL + ',' + CAT + ',"Receitas")', a.totalReceitas, MOEDA],
       ["Gastos", "'Por categoria'!C" + rt, a.totalGastos, MOEDA],
-      ["Investido", '-SUMIFS(' + VAL + ',' + CAT + ',"Investimentos")', a.investido, MOEDA],
+      ["Investido líquido (− = resgate)", '-SUMIFS(' + VAL + ',' + CAT + ',"Investimentos")', a.investido, MOEDA],
       ["Estornos e créditos", 'SUMIFS(' + VAL + ',' + CAT + ',"Estornos e créditos")', a.totalEstornos, MOEDA],
       ["Sobra (entradas − gastos)", 'IF(C6=0,"",C6-C7)', a.sobra === null ? "" : a.sobra, MOEDA],
       ["Taxa de poupança", 'IF(C6=0,"",C10/C6)', a.totalReceitas ? a.sobra / a.totalReceitas : "", PCT],
@@ -288,7 +288,7 @@ window.VHG_EXTRATOS_SAIDAS = (function () {
     para("Este resumo foi montado a partir " + (d.arquivos.length > 1 ? "dos " + d.arquivos.length + " documentos enviados" : "do documento enviado") + ", referente a " + d.periodo + ". Cada lançamento foi colocado numa categoria para mostrar, de uma vez, para onde foi o dinheiro.");
     y += 2;
     var ks = a.modoRenda
-      ? [["ENTRADAS", brl(a.totalReceitas), "Salário, PIX e depósitos"], ["GASTOS", brl(a.totalGastos), n1(a.totalGastos / a.totalReceitas * 100) + "% do que entrou"], ["INVESTIDO", brl(a.investido), "Aplicações no período"], ["SOBRA", brl(a.sobra), n1(a.sobra / a.totalReceitas * 100) + "% da renda · referência: 20%", 1]]
+      ? [["ENTRADAS", brl(a.totalReceitas), "Salário, PIX e depósitos"], ["GASTOS", brl(a.totalGastos), n1(a.totalGastos / a.totalReceitas * 100) + "% do que entrou"], (a.investido < 0 ? ["RESGATADO", brl(-a.investido), "Resgates maiores que as aplicações"] : ["INVESTIDO", brl(a.investido), "Aplicações no período"]), ["SOBRA", brl(a.sobra), n1(a.sobra / a.totalReceitas * 100) + "% da renda · referência: 20%", 1]]
       : [["GASTOS", brl(a.totalGastos), a.nGastos + " lançamentos"], ["ESTORNOS E CRÉDITOS", brl(a.totalEstornos), a.estornosAbatidos ? "Já descontados dos gastos" : "Devoluções e créditos"], ["PARCELAS A VENCER", brl(a.totalParcelasFuturas), a.parcelas.length + " compras parceladas"], ["ASSINATURAS", brl(a.totalAssinaturas / Math.max(1, a.meses.length)), "por mês", 1]];
     var kw = (CW - 5) / 2;
     ks.forEach(function (k, i) {

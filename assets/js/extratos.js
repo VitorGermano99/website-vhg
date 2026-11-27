@@ -271,7 +271,7 @@ window.VHG_EXTRATOS = (function () {
     if (a.modoRenda) {
       k.push(["ENTRADAS", brl0(a.totalReceitas), "Salário, PIX e depósitos"]);
       k.push(["GASTOS", brl0(a.totalGastos), a.nGastos + " lançamentos" + (a.estornosAbatidos ? " · já sem os estornos" : "")]);
-      k.push(["INVESTIDO", brl0(a.investido), "Aplicações no período"]);
+      k.push(a.investido < 0 ? ["RESGATADO", brl0(-a.investido), "Resgates maiores que as aplicações"] : ["INVESTIDO", brl0(a.investido), "Aplicações no período"]);
       k.push(["SOBRA", brl0(a.sobra), n1(a.sobra / a.totalReceitas * 100) + "% da renda", true]);
     } else {
       k.push(["GASTOS", brl0(a.totalGastos), a.nGastos + " lançamentos" + (a.estornosAbatidos ? " · já sem os estornos" : "")]);

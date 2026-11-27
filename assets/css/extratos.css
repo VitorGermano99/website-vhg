@@ -147,6 +147,9 @@ button.ext-pill { cursor: pointer; } button.ext-pill:hover { border-color: var(-
 
 @media (max-width: 760px) {
   .ext-kpis { grid-template-columns: 1fr 1fr; }
+  .ext-abas { display: flex; flex-wrap: nowrap; }
+  .ext-abas button { flex: 1 1 auto; padding: 0 10px; letter-spacing: .08em; font-size: 10.5px; white-space: nowrap; }
+  .ext-abas .cont { margin-left: 4px; }
   .ext-insights, .ext-dois { grid-template-columns: 1fr; }
   .ext-barra { grid-template-columns: 104px 1fr 86px; }
   .ext-barra .pc { display: none; }
