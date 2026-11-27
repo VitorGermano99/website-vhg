@@ -54,6 +54,15 @@ button.ext-pill { cursor: pointer; } button.ext-pill:hover { border-color: var(-
 .ext-periodo { font-size: 11px; font-weight: 500; letter-spacing: .22em; color: var(--texto-3); text-transform: uppercase; margin-bottom: 12px; }
 .ext-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 22px; }
 .ext-kpi { background: var(--papel-claro); border: 1px solid rgba(18,59,71,.09); border-radius: var(--r-md, 20px); padding: 16px; box-shadow: var(--sombra-1); min-width: 0; }
+.ext-saldos { display: grid; gap: 10px; margin: -8px 0 22px; }
+.ext-saldo { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px; background: var(--papel-claro); border: 1px solid rgba(18,59,71,.09); border-radius: var(--r-md, 20px); padding: 14px 18px; box-shadow: var(--sombra-1); }
+.ext-saldo-nm { flex-basis: 100%; font-size: 12.5px; font-weight: 500; color: var(--texto-2); }
+.ext-saldo-l .r { font-size: 10px; font-weight: 500; letter-spacing: .16em; color: var(--texto-4); }
+.ext-saldo-l .v { font-family: var(--serif); font-size: 20px; color: var(--petroleo); margin-top: 4px; font-feature-settings: 'tnum'; white-space: nowrap; }
+.ext-saldo-l.var { margin-left: auto; text-align: right; }
+.ext-saldo-l.var .v { font-size: 16px; color: var(--texto-2); }
+.ext-saldo-seta { color: var(--cobre); font-size: 18px; }
+.ext-saldo-obs { flex-basis: 100%; font-size: 12px; color: var(--texto-3); }
 .ext-kpi .r { font-size: 10px; font-weight: 500; letter-spacing: .16em; color: var(--texto-4); }
 .ext-kpi .v { font-family: var(--serif); font-size: 23px; color: var(--petroleo); margin-top: 8px; font-feature-settings: 'tnum'; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ext-kpi .s { font-size: 12.5px; color: var(--texto-3); margin-top: 4px; }
@@ -138,6 +147,9 @@ button.ext-pill { cursor: pointer; } button.ext-pill:hover { border-color: var(-
 
 @media (max-width: 760px) {
   .ext-kpis { grid-template-columns: 1fr 1fr; }
+  .ext-abas { display: flex; flex-wrap: nowrap; }
+  .ext-abas button { flex: 1 1 auto; padding: 0 10px; letter-spacing: .08em; font-size: 10.5px; white-space: nowrap; }
+  .ext-abas .cont { margin-left: 4px; }
   .ext-insights, .ext-dois { grid-template-columns: 1fr; }
   .ext-barra { grid-template-columns: 104px 1fr 86px; }
   .ext-barra .pc { display: none; }

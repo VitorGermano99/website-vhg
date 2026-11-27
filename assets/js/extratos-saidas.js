@@ -37,6 +37,12 @@ window.VHG_EXTRATOS_SAIDAS = (function () {
   }
   function semTags(h) { return String(h).replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<"); }
   function tipoDoc(t) { return t === "cartao" ? "Fatura de cartão" : t === "conta" ? "Extrato de conta" : ""; }
+  // "Saldo em 01/10/2026: R$ 9.850,35 → em 31/10/2026: R$ 9.870,75"
+  function saldosTexto(f) {
+    var s = f.saldos; if (!s) return "";
+    var v = function (x) { return x === null ? "não informado" : brl(x); };
+    return "Saldo em " + dataBR(s.de) + ": " + v(s.inicial) + " → em " + dataBR(s.ate) + ": " + v(s.final) + (s.conferido ? "" : " (confira com o banco)");
+  }
   function hoje(d) { return d.geradoEm.toLocaleDateString("pt-BR"); }
 
   // ── .txt ──────────────────────────────────────────────────────
@@ -47,11 +53,11 @@ window.VHG_EXTRATOS_SAIDAS = (function () {
     L.push("=".repeat(W), centro("ANÁLISE DE EXTRATOS · VERSÃO LIMPA", W), centro("VHG · Planejamento Financeiro", W), "=".repeat(W), "");
     if (d.cliente) L.push("Cliente ......: " + d.cliente);
     L.push("Período ......: " + d.periodo, "Gerado em ....: " + hoje(d), "");
-    d.arquivos.forEach(function (f) { L.push("Arquivo ......: " + f.nome + "  (" + [tipoDoc(f.tipo), f.banco, f.n + " lançamentos"].filter(Boolean).join(" · ") + ")", "  Conferência: " + (f.conferencia ? f.conferencia.msg : "")); });
+    d.arquivos.forEach(function (f) { L.push("Arquivo ......: " + f.nome + "  (" + [tipoDoc(f.tipo), f.banco, f.n + " lançamentos"].filter(Boolean).join(" · ") + ")", "  Conferência: " + (f.conferencia ? f.conferencia.msg : "")); if (f.saldos) L.push("  " + saldosTexto(f)); });
     L.push("");
     if (a.totalReceitas) L.push("Entradas .............. " + padL(brl(a.totalReceitas), 16));
     L.push("Gastos ................ " + padL(brl(a.totalGastos), 16));
-    if (a.investido) L.push("Investido ............. " + padL(brl(a.investido), 16));
+    if (a.investido) L.push((a.investido < 0 ? "Resgatado ............. " : "Investido ............. ") + padL(brl(Math.abs(a.investido)), 16));
     if (a.totalEstornos) L.push("Estornos e créditos ... " + padL(brl(a.totalEstornos), 16) + (a.estornosAbatidos ? "  (já descontados dos gastos)" : ""));
     if (a.sobra !== null) L.push("Sobra ................. " + padL(brl(a.sobra), 16));
     L.push("", "-".repeat(W), pad("DATA", 12) + pad("DESCRIÇÃO", 44) + pad("CATEGORIA", 22) + padL("VALOR", 22), "-".repeat(W));
@@ -139,7 +145,7 @@ window.VHG_EXTRATOS_SAIDAS = (function () {
     var linhas = [
       ["Entradas (receitas)", 'SUMIFS(' + VAL + ',' + CAT + ',"Receitas")', a.totalReceitas, MOEDA],
       ["Gastos", "'Por categoria'!C" + rt, a.totalGastos, MOEDA],
-      ["Investido", '-SUMIFS(' + VAL + ',' + CAT + ',"Investimentos")', a.investido, MOEDA],
+      ["Investido líquido (− = resgate)", '-SUMIFS(' + VAL + ',' + CAT + ',"Investimentos")', a.investido, MOEDA],
       ["Estornos e créditos", 'SUMIFS(' + VAL + ',' + CAT + ',"Estornos e créditos")', a.totalEstornos, MOEDA],
       ["Sobra (entradas − gastos)", 'IF(C6=0,"",C6-C7)', a.sobra === null ? "" : a.sobra, MOEDA],
       ["Taxa de poupança", 'IF(C6=0,"",C10/C6)', a.totalReceitas ? a.sobra / a.totalReceitas : "", PCT],
@@ -156,7 +162,7 @@ window.VHG_EXTRATOS_SAIDAS = (function () {
     wsR.getCell("B" + r).value = "ARQUIVOS LIDOS"; wsR.getCell("B" + r).font = { name: "Arial", size: 9, bold: true, color: { argb: "FFC08A4E" } };
     d.arquivos.forEach(function (f, i) {
       wsR.getCell("B" + (r + 1 + i)).value = f.nome; wsR.getCell("B" + (r + 1 + i)).font = fB;
-      wsR.getCell("C" + (r + 1 + i)).value = [tipoDoc(f.tipo), f.banco, f.n + " lançamentos", f.conferencia ? f.conferencia.msg : ""].filter(Boolean).join(" · "); wsR.getCell("C" + (r + 1 + i)).font = fS;
+      wsR.getCell("C" + (r + 1 + i)).value = [tipoDoc(f.tipo), f.banco, f.n + " lançamentos", f.conferencia ? f.conferencia.msg : "", saldosTexto(f)].filter(Boolean).join(" · "); wsR.getCell("C" + (r + 1 + i)).font = fS;
     });
     var rr = r + 2 + d.arquivos.length;
     wsR.getCell("B" + rr).value = "As fórmulas leem a aba Lançamentos: se uma categoria for corrigida lá, o resumo se atualiza sozinho."; wsR.getCell("B" + rr).font = fS;
@@ -282,7 +288,7 @@ window.VHG_EXTRATOS_SAIDAS = (function () {
     para("Este resumo foi montado a partir " + (d.arquivos.length > 1 ? "dos " + d.arquivos.length + " documentos enviados" : "do documento enviado") + ", referente a " + d.periodo + ". Cada lançamento foi colocado numa categoria para mostrar, de uma vez, para onde foi o dinheiro.");
     y += 2;
     var ks = a.modoRenda
-      ? [["ENTRADAS", brl(a.totalReceitas), "Salário, PIX e depósitos"], ["GASTOS", brl(a.totalGastos), n1(a.totalGastos / a.totalReceitas * 100) + "% do que entrou"], ["INVESTIDO", brl(a.investido), "Aplicações no período"], ["SOBRA", brl(a.sobra), n1(a.sobra / a.totalReceitas * 100) + "% da renda · referência: 20%", 1]]
+      ? [["ENTRADAS", brl(a.totalReceitas), "Salário, PIX e depósitos"], ["GASTOS", brl(a.totalGastos), n1(a.totalGastos / a.totalReceitas * 100) + "% do que entrou"], (a.investido < 0 ? ["RESGATADO", brl(-a.investido), "Resgates maiores que as aplicações"] : ["INVESTIDO", brl(a.investido), "Aplicações no período"]), ["SOBRA", brl(a.sobra), n1(a.sobra / a.totalReceitas * 100) + "% da renda · referência: 20%", 1]]
       : [["GASTOS", brl(a.totalGastos), a.nGastos + " lançamentos"], ["ESTORNOS E CRÉDITOS", brl(a.totalEstornos), a.estornosAbatidos ? "Já descontados dos gastos" : "Devoluções e créditos"], ["PARCELAS A VENCER", brl(a.totalParcelasFuturas), a.parcelas.length + " compras parceladas"], ["ASSINATURAS", brl(a.totalAssinaturas / Math.max(1, a.meses.length)), "por mês", 1]];
     var kw = (CW - 5) / 2;
     ks.forEach(function (k, i) {
@@ -293,6 +299,26 @@ window.VHG_EXTRATOS_SAIDAS = (function () {
       fonte(F.sans, 7.5); cor(k[3] ? [200, 205, 200] : T3); doc.text(k[2], x + 6, yy + 20);
     });
     y += 58;
+    // saldo da conta (extrato de conta)
+    var comSaldo = d.arquivos.filter(function (f) { return f.saldos; });
+    comSaldo.forEach(function (f) {
+      var sd = f.saldos, partes = [["SALDO INICIAL · " + dataBR(sd.de), sd.inicial], ["SALDO FINAL · " + dataBR(sd.ate), sd.final]];
+      if (sd.inicial !== null && sd.final !== null) partes.push(["VARIAÇÃO", Math.round((sd.final - sd.inicial) * 100) / 100]);
+      var nm = comSaldo.length > 1 || d.arquivos.length > 1 ? (f.banco || f.nome) : "", hS = nm ? 27 : 22;
+      if (!sd.conferido) hS += 4;
+      caixa(M, y, CW, hS, PAP, null);
+      var yy = y + 7;
+      if (nm) { fonte(F.sans, 8); cor(T2); doc.text(nm, M + 6, yy); yy += 5; }
+      var cw = (CW - 12) / partes.length;
+      partes.forEach(function (pt, i) {
+        var x = M + 6 + i * cw;
+        fonte(F.sans, 6.4); cor(T4); espacado(pt[0], x, yy, 0.7);
+        fonte(F.serif, 15); cor(i === 2 ? T2 : PET); doc.text(pt[1] === null ? "—" : (i === 2 && pt[1] > 0 ? "+" : "") + brl(pt[1]), x, yy + 8);
+      });
+      if (!sd.conferido) { fonte(F.sans, 7); cor(T3); doc.text("Os saldos do extrato não bateram em todos os pontos: confira com o banco.", M + 6, yy + 13.5); }
+      y += hS + 5;
+    });
+    if (comSaldo.length) y += 3;
     // conferência
     var conf = d.arquivos.map(function (f) { return (f.conferencia && f.conferencia.nivel === "ok" ? "✓ " : "! ") + f.nome + ": " + (f.conferencia ? f.conferencia.msg : ""); });
     fonte(F.sans, 8);
