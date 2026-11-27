@@ -558,6 +558,8 @@
     if (/^[-−–+]?(R\$|US\$)?[-−–]?$/.test(t)) return t;                       // sinal e moeda soltos
     if (LIVRES[norm(nucleo).replace(/[^a-z0-9]/g, "")] && !/\d/.test(nucleo)) return t;
     if (/^[-−–]?[0.,]+$/.test(nucleo)) return t;                                // zero
+    // valores em dinheiro ficam como estão (ajudam a conferir a leitura); nomes, CPF e conta, não
+    if (/,\d{2}/.test(t) && ehValor(t.replace(/^[-−–+]?(R\$|US\$)?\s?/, ""))) return t;
     var cola = /(\d{1,2}\/\d{1,2})$/.exec(t);                                   // parcela grudada ("SH03/03")
     var corpo = cola ? t.slice(0, -cola[1].length) : t;
     return sem(corpo).replace(/[A-Z]/g, "X").replace(/[a-z]/g, "x").replace(/\d/g, "9") + (cola ? cola[1] : "");

@@ -235,7 +235,7 @@ window.VHG_EXTRATOS = (function () {
         '<div class="ext-conf ' + (c.nivel || "") + '">' + ic + '<span>' + esc(c.msg || "") + '</span></div>' +
         (f.info._paginas ? (c.nivel === "ok"
           ? '<button type="button" class="ext-layout discreto" data-layout="' + i + '">Baixar layout para ajuste</button>'
-          : '<div class="ext-layout-caixa"><button type="button" class="btn btn-linha" data-layout="' + i + '">BAIXAR LAYOUT PARA AJUSTE</button><span>A leitura não fechou. Este arquivo mostra só o formato do PDF, sem nomes nem valores, e serve para ajustarmos a leitura deste banco.</span></div>') : "") +
+          : '<div class="ext-layout-caixa"><button type="button" class="btn btn-linha" data-layout="' + i + '">BAIXAR LAYOUT PARA AJUSTE</button><span>A leitura não fechou. Este arquivo mostra o formato do PDF e os valores, sem nomes, CPF ou número de conta, e serve para ajustarmos a leitura deste banco.</span></div>') : "") +
         '</div>' +
         '<button type="button" class="ext-remover" data-remover="' + i + '" aria-label="Remover ' + esc(f.nome) + '">' + I.x + '</button></div>';
     }).join("");
