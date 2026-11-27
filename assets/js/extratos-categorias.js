@@ -148,7 +148,10 @@
   function prefixo(a, b) { var i = 0; while (i < a.length && a[i] === b[i]) i++; return i; }
 
   function analisar(trans) {
-    var gastos = trans.filter(function (t) { return t.valor < 0 && !NAO_GASTO[t.categoria]; });
+    // Sem a fatura do cartão junto, o pagamento dela é dinheiro que saiu da conta: conta como gasto
+    // (com a fatura junto, os gastos já aparecem compra por compra e contar o pagamento seria em dobro)
+    var temCartao = trans.some(function (t) { return t.tipoDoc === "cartao"; });
+    var gastos = trans.filter(function (t) { return t.valor < 0 && (!NAO_GASTO[t.categoria] || (!temCartao && t.categoria === "Pagamento de fatura")); });
     var estornos = trans.filter(function (t) { return t.categoria === "Estornos e créditos"; });
     var receitas = trans.filter(function (t) { return t.valor > 0 && t.categoria === "Receitas"; });
     var investido = r2(-trans.filter(function (t) { return t.categoria === "Investimentos"; }).reduce(function (a, t) { return a + t.valor; }, 0));
@@ -233,6 +236,8 @@
     if (cats[0]) ins.push({ t: "MAIOR CATEGORIA", h: "<b>" + cats[0].categoria + "</b> foi onde mais saiu dinheiro: <b>" + brl(cats[0].total) + "</b>, " + n1(cats[0].pct) + "% dos gastos" + (meses.length > 1 ? " no período" : "") + "." });
     if (delivery.length) ins.push({ t: "DELIVERY", h: "<b>" + delivery.length + " pedidos</b> de delivery somaram " + brl(-delivery.reduce(function (a, t) { return a + t.valor; }, 0)) + ". Comer fora no total: <b>" + brl(fora) + "</b>." });
     if (assinaturas.length) ins.push({ t: "ASSINATURAS", h: assinaturas.length + " cobranças de assinatura: <b>" + brl(media(totalAssin)) + " por mês</b>, cerca de " + brl(media(totalAssin) * 12) + " por ano." });
+    var faturasPagas = gastos.filter(function (t) { return t.categoria === "Pagamento de fatura"; });
+    if (faturasPagas.length) ins.push({ t: "FATURA DO CARTÃO", h: "Saíram <b>" + brl(-faturasPagas.reduce(function (a, t) { return a + t.valor; }, 0)) + "</b> em " + faturasPagas.length + (faturasPagas.length > 1 ? " pagamentos" : " pagamento") + " de fatura de cartão. Envie a fatura junto com o extrato para ver em que esse dinheiro foi gasto." });
     if (parcelas.length) ins.push({ t: "PARCELAS", h: "<b>" + parcelas.length + " compras parceladas</b> em andamento. Ainda faltam <b>" + brl(totalParcelasFuturas) + "</b> nas próximas faturas." });
     var modoRenda = totalReceitas > 0 && totalReceitas >= totalGastos * 0.2; // só faz sentido com extrato de conta que traz a renda
     if (modoRenda) {
