@@ -146,3 +146,11 @@ button.ext-pill { cursor: pointer; } button.ext-pill:hover { border-color: var(-
   .ext-tabela-wrap { padding: 10px 12px; }
   .ext-tab select { max-width: 120px; }
 }
+
+/* Trocar categorias */
+.ext-dica { margin: 6px 0 12px; }
+.ext-mover { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; font-size: 13.5px; color: var(--texto-2); margin: 0 0 14px; }
+.ext-mover select, .ext-regra select { border: 1px solid var(--linha); border-radius: 999px; padding: 7px 12px; font-size: 12.5px; background: #fff; color: var(--petroleo); max-width: 100%; }
+.ext-mover .btn { padding: 9px 16px; font-size: 11px; min-height: 0; }
+.ext-regra select { margin-left: auto; }
+.ext-mudou { font-style: normal; font-size: 11.5px; color: var(--cobre, #b7834c); }
