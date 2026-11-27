@@ -43,6 +43,11 @@ window.VHG_EXTRATOS_SAIDAS = (function () {
     var v = function (x) { return x === null ? "não informado" : brl(x); };
     return "Saldo em " + dataBR(s.de) + ": " + v(s.inicial) + " → em " + dataBR(s.ate) + ": " + v(s.final) + (s.conferido ? "" : " (confira com o banco)");
   }
+  function somaSaldos(lista) {
+    var com = lista.filter(Boolean);
+    if (!com.length || com.some(function (s) { return s.inicial === null || s.final === null; })) return null;
+    return { inicial: Math.round(com.reduce(function (a, s) { return a + s.inicial; }, 0) * 100) / 100, final: Math.round(com.reduce(function (a, s) { return a + s.final; }, 0) * 100) / 100 };
+  }
   function hoje(d) { return d.geradoEm.toLocaleDateString("pt-BR"); }
 
   // ── .txt ──────────────────────────────────────────────────────
@@ -59,7 +64,7 @@ window.VHG_EXTRATOS_SAIDAS = (function () {
     L.push("Gastos ................ " + padL(brl(a.totalGastos), 16));
     if (a.investido) L.push((a.investido < 0 ? "Resgatado ............. " : "Investido ............. ") + padL(brl(Math.abs(a.investido)), 16));
     if (a.totalEstornos) L.push("Estornos e créditos ... " + padL(brl(a.totalEstornos), 16) + (a.estornosAbatidos ? "  (já descontados dos gastos)" : ""));
-    if (a.sobra !== null) L.push("Sobra ................. " + padL(brl(a.sobra), 16));
+    if (a.sobra !== null) L.push("Resultado do período .. " + padL(brl(a.sobra), 16) + "  (entradas − gastos − investido)");
     L.push("", "-".repeat(W), pad("DATA", 12) + pad("DESCRIÇÃO", 44) + pad("CATEGORIA", 22) + padL("VALOR", 22), "-".repeat(W));
     d.trans.forEach(function (t) {
       L.push(pad(dataBR(t.data), 12) + pad(t.descricao + (t.parcela ? " (" + t.parcela.atual + "/" + t.parcela.total + ")" : ""), 44) + pad(t.categoria, 22) + padL(brlS(t.valor), 22));
@@ -147,8 +152,8 @@ window.VHG_EXTRATOS_SAIDAS = (function () {
       ["Gastos", "'Por categoria'!C" + rt, a.totalGastos, MOEDA],
       ["Investido líquido (− = resgate)", '-SUMIFS(' + VAL + ',' + CAT + ',"Investimentos")', a.investido, MOEDA],
       ["Estornos e créditos", 'SUMIFS(' + VAL + ',' + CAT + ',"Estornos e créditos")', a.totalEstornos, MOEDA],
-      ["Sobra (entradas − gastos)", 'IF(C6=0,"",C6-C7)', a.sobra === null ? "" : a.sobra, MOEDA],
-      ["Taxa de poupança", 'IF(C6=0,"",C10/C6)', a.totalReceitas ? a.sobra / a.totalReceitas : "", PCT],
+      ["Resultado do período (entradas − gastos − investido)", 'IF(C6=0,"",C6-C7-C8)', a.sobra === null ? "" : a.sobra, MOEDA],
+      ["Taxa de poupança", 'IF(C6=0,"",(C6-C7)/C6)', a.totalReceitas ? a.poupanca / a.totalReceitas : "", PCT],
       ["Assinaturas no período", '-SUMIFS(' + VAL + ',' + CAT + ',"Assinaturas")', a.totalAssinaturas, MOEDA],
       ["Parcelas ainda a vencer", wsP ? "Parcelas!E" + (5 + a.parcelas.length) : "0", a.totalParcelasFuturas, MOEDA],
       ["Lançamentos a revisar", 'COUNTIF(' + CAT + ',"A revisar")', a.revisar.length, "0"]
@@ -283,12 +288,14 @@ window.VHG_EXTRATOS_SAIDAS = (function () {
     // 2 · resumo
     novaPagina();
     eyebrow("Resumo");
-    if (a.modoRenda) titulo("Entrou " + brl(a.totalReceitas).replace(/,\d\d$/, "") + ". " + (a.sobra >= 0 ? "Sobrou " + n1(a.sobra / a.totalReceitas * 100) + "%." : "Faltou " + brl(-a.sobra).replace(/,\d\d$/, "") + "."));
+    var sdT = somaSaldos(d.arquivos.map(function (f) { return f.saldos; }));
+    if (a.modoRenda && sdT) titulo("Entrou " + brl(a.totalReceitas).replace(/,\d\d$/, "") + ". A conta terminou com " + brl(sdT.final) + ".");
+    else if (a.modoRenda) titulo("Entrou " + brl(a.totalReceitas).replace(/,\d\d$/, "") + ". " + (a.sobra >= 0 ? "Sobrou " + n1(a.sobra / a.totalReceitas * 100) + "%." : "Faltou " + brl(-a.sobra).replace(/,\d\d$/, "") + "."));
     else titulo(brl(a.totalGastos).replace(/,\d\d$/, "") + " em gastos" + (a.meses.length > 1 ? ", " + brl(a.mediaMensalGastos).replace(/,\d\d$/, "") + " por mês" : "") + ".");
     para("Este resumo foi montado a partir " + (d.arquivos.length > 1 ? "dos " + d.arquivos.length + " documentos enviados" : "do documento enviado") + ", referente a " + d.periodo + ". Cada lançamento foi colocado numa categoria para mostrar, de uma vez, para onde foi o dinheiro.");
     y += 2;
     var ks = a.modoRenda
-      ? [["ENTRADAS", brl(a.totalReceitas), "Salário, PIX e depósitos"], ["GASTOS", brl(a.totalGastos), n1(a.totalGastos / a.totalReceitas * 100) + "% do que entrou"], (a.investido < 0 ? ["RESGATADO", brl(-a.investido), "Resgates maiores que as aplicações"] : ["INVESTIDO", brl(a.investido), "Aplicações no período"]), ["SOBRA", brl(a.sobra), n1(a.sobra / a.totalReceitas * 100) + "% da renda · referência: 20%", 1]]
+      ? [["ENTRADAS", brl(a.totalReceitas), "Salário, PIX e depósitos"], ["GASTOS", brl(a.totalGastos), n1(a.totalGastos / a.totalReceitas * 100) + "% do que entrou"], (a.investido < 0 ? ["RESGATADO", brl(-a.investido), "Resgates maiores que as aplicações"] : ["INVESTIDO", brl(a.investido), "Aplicações no período"]), (sdT ? ["FICOU NA CONTA", brl(sdT.final), "Começou com " + brl(sdT.inicial) + " · " + (a.sobra >= 0 ? "+" : "") + brl(a.sobra) + " no período", 1] : ["SOBRA", brl(a.sobra), n1(a.poupanca / a.totalReceitas * 100) + "% da renda guardada · referência: 20%", 1])]
       : [["GASTOS", brl(a.totalGastos), a.nGastos + " lançamentos"], ["ESTORNOS E CRÉDITOS", brl(a.totalEstornos), a.estornosAbatidos ? "Já descontados dos gastos" : "Devoluções e créditos"], ["PARCELAS A VENCER", brl(a.totalParcelasFuturas), a.parcelas.length + " compras parceladas"], ["ASSINATURAS", brl(a.totalAssinaturas / Math.max(1, a.meses.length)), "por mês", 1]];
     var kw = (CW - 5) / 2;
     ks.forEach(function (k, i) {
