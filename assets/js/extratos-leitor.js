@@ -447,7 +447,57 @@
     return { tipo: "conta", banco: detectarBanco(texto), transacoes: trans, conferencia: { ok: false, nivel: "aviso", msg: "Planilha lida pelas colunas de data, descrição e valor. Confira o total." }, parcial: "" };
   }
 
-  var api = { ler: ler, endireitar: endireitar, lerOFX: lerOFX, lerCSV: lerCSV, linhas: linhas, norm: norm, ehValor: ehValor, valorDe: valorDe, detectarBanco: detectarBanco, R_PAGAMENTO: R_PAGAMENTO };
+  // ── Layout disfarçado ─────────────────────────────────────────
+  // Para ajustar o leitor a um banco novo sem ver dados do cliente: guarda só a posição
+  // de cada texto e o formato dele. Palavras comuns de extrato, datas e meses ficam;
+  // nomes, lojas e descrições viram "Xxxx"; todo número que não é data vira 9.
+  var PALAVRAS_LIVRES = ("total totais subtotal sub fatura faturas vencimento venc vcto saldo saldos anterior atual atuais pagamento pagamentos pgto pagto pag " +
+    "parcela parcelas parcelado parcelada parceladas parcelados parcelamento credito creditos debito debitos data datas historico valor valores " +
+    "lancamento lancamentos compra compras despesa despesas estorno estornos tarifa tarifas juros encargos iof anuidade limite limites minimo " +
+    "disponivel proxima proximas proximo proximos futura futuras futuro futuros demais resumo periodo emissao fechamento transacao transacoes " +
+    "movimentacao movimentacoes extrato conta corrente poupanca agencia cartao cartoes final nacional nacionais internacional internacionais " +
+    "outro outros outra outras docto doc documento descricao estabelecimento cidade reais real dolar dolares cotacao rendimento rendimentos " +
+    "aplicacao aplicacoes resgate pix ted transferencia transf enviado enviada recebido recebida recebidos recebidas saque saques deposito boleto " +
+    "recebimento mensalidade desconto seguro seguros cashback beneficio beneficios obrigacoes feitos feito feitas aberto aberta fechada fechado " +
+    "pagar pago paga multa mora rotativo cet taxa taxas especial cheque vista fisico virtual adicional titular dependente nome " +
+    "alimentacao saude educacao vestuario veiculos turismo entretenimento entretenim hobby supermercado supermercados restaurante restaurantes " +
+    "combustivel farmacia diversos servicos lazer viagem viagens moradia transporte " +
+    "a o as os ao aos de da do das dos e em no na nos nas para por ate entre com sem sua seu suas seus desta deste dessa desse esta este essa esse " +
+    "mes meses dia dias folha pagina via ou que se ja nao sim um uma n no. nr num " +
+    "itau bradesco santander nubank nu btg pactual caixa banco bancos brasil inter c6 xp sicoob sicredi mercado pago picpay original safra bank " +
+    "visa mastercard master elo amex hipercard platinum gold black infinite signature grafite internacional personnalite uniclass prime select " +
+    "janeiro fevereiro marco abril maio junho julho agosto setembro outubro novembro dezembro " +
+    "jan fev mar abr mai jun jul ago set out nov dez").split(" ");
+  var LIVRES = {}; PALAVRAS_LIVRES.forEach(function (p) { LIVRES[p] = 1; });
+
+  function disfarcarTexto(t) {
+    t = String(t);
+    var nucleo = t.replace(/^[(\[]+|[)\].,:;]+$/g, "");
+    if (/^\d{1,2}\/\d{1,2}(\/\d{2}|\/\d{4})?$/.test(nucleo)) return t;      // data ou parcela
+    if (/^(19|20)\d{2}$/.test(nucleo)) return t;                              // ano
+    if (/^\d{1,2}$/.test(nucleo) && +nucleo <= 31) return t;                   // dia ("18 OUT")
+    if (/^[-−–+]?(R\$|US\$)?[-−–]?$/.test(t)) return t;                       // sinal e moeda soltos
+    if (LIVRES[norm(nucleo).replace(/[^a-z0-9]/g, "")] && !/\d/.test(nucleo)) return t;
+    if (/^[-−–]?[0.,]+$/.test(nucleo)) return t;                                // zero
+    var cola = /(\d{1,2}\/\d{1,2})$/.exec(t);                                   // parcela grudada ("SH03/03")
+    var corpo = cola ? t.slice(0, -cola[1].length) : t;
+    return sem(corpo).replace(/[A-Z]/g, "X").replace(/[a-z]/g, "x").replace(/\d/g, "9") + (cola ? cola[1] : "");
+  }
+  function disfarcar(paginas, extra) {
+    return {
+      formato: "vhg-layout-extrato", versao: 1, gerado: new Date().toISOString().slice(0, 10), extra: extra || {},
+      paginas: paginas.map(function (p) {
+        return {
+          width: Math.round(p.width * 10) / 10, height: Math.round(p.height * 10) / 10, tol: p.tol,
+          words: p.words.map(function (w) {
+            return { text: disfarcarTexto(w.text), x0: Math.round(w.x0 * 10) / 10, x1: Math.round(w.x1 * 10) / 10, top: Math.round(w.top * 10) / 10 };
+          })
+        };
+      })
+    };
+  }
+
+  var api = { ler: ler, disfarcar: disfarcar, disfarcarTexto: disfarcarTexto, endireitar: endireitar, lerOFX: lerOFX, lerCSV: lerCSV, linhas: linhas, norm: norm, ehValor: ehValor, valorDe: valorDe, detectarBanco: detectarBanco, R_PAGAMENTO: R_PAGAMENTO };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.VHG_EXTRATOS_LEITOR = api;
 })(this);
