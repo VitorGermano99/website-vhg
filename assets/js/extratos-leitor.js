@@ -389,7 +389,30 @@
       parcial: parte && +parte[2] > paginas.length ? "O arquivo parece ser só parte do extrato (folha " + parte[1] + " de " + parte[2] + ")." : ""
     };
     info.conferencia = conferir(info, resumo);
+    if (tipo === "conta") info.saldos = saldosDaConta(trans, resumo, info.conferencia);
     return info;
+  }
+
+  // Saldo no começo e no fim do período do extrato de conta.
+  // Usa o "saldo anterior" impresso; se não houver, volta do primeiro saldo do dia
+  // descontando os lançamentos até ele. O saldo final é o do último dia (mais os
+  // lançamentos que vierem depois dele, se houver).
+  function saldosDaConta(trans, resumo, conf) {
+    if (!trans.length) return null;
+    var cron = trans.slice();
+    if (cron[0].data > cron[cron.length - 1].data) cron.reverse(); // extrato do mais novo para o mais antigo
+    var r2 = function (v) { return Math.round(v * 100) / 100; };
+    var temSaldo = function (t) { return t.saldoApos !== null && t.saldoApos !== undefined; };
+    var ant = resumo.filter(function (r) { return /saldo anterior|saldo inicial/.test(r.t); })[0];
+    var ini = ant ? ant.vals[ant.vals.length - 1] : null, fim = null, soma = 0, i;
+    if (ini === null) {
+      for (i = 0; i < cron.length; i++) { soma += cron[i].valor; if (temSaldo(cron[i])) { ini = r2(cron[i].saldoApos - soma); break; } }
+    }
+    soma = 0;
+    for (i = cron.length - 1; i >= 0; i--) { if (temSaldo(cron[i])) { fim = r2(cron[i].saldoApos + soma); break; } soma += cron[i].valor; }
+    if (fim === null && ini !== null) fim = r2(ini + cron.reduce(function (s, t) { return s + t.valor; }, 0));
+    if (ini === null && fim === null) return null;
+    return { inicial: ini, final: fim, de: cron[0].data, ate: cron[cron.length - 1].data, conferido: !!(conf && conf.nivel === "ok") };
   }
 
   // ── Conferência dos totais ───────────────────────────────────

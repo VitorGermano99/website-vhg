@@ -282,6 +282,20 @@ window.VHG_EXTRATOS = (function () {
     return '<div class="ext-kpis">' + k.map(function (x) { return '<div class="ext-kpi' + (x[3] ? " escuro" : "") + '"><div class="r">' + x[0] + '</div><div class="v">' + x[1] + '</div><div class="s">' + esc(x[2]) + '</div></div>'; }).join("") + '</div>';
   }
 
+  // Extrato de conta: saldo no começo e no fim do período, por arquivo
+  function saldosConta() {
+    var multi = estado.arquivos.length > 1;
+    var itens = estado.arquivos.filter(function (f) { return f.info.saldos; }).map(function (f) {
+      var s = f.info.saldos, nome = multi ? (f.info.banco || f.nome) : "";
+      function lado(rot, v, d) { return '<div class="ext-saldo-l"><div class="r">' + rot + ' · ' + dm(d) + '</div><div class="v">' + (v === null ? "—" : brl(v)) + '</div></div>'; }
+      return '<div class="ext-saldo">' + (nome ? '<div class="ext-saldo-nm">' + esc(nome) + '</div>' : "") + lado("SALDO INICIAL", s.inicial, s.de) +
+        '<span class="ext-saldo-seta" aria-hidden="true">→</span>' + lado("SALDO FINAL", s.final, s.ate) +
+        (s.inicial !== null && s.final !== null ? '<div class="ext-saldo-l var"><div class="r">VARIAÇÃO</div><div class="v">' + (s.final - s.inicial > 0 ? "+" : "") + brl(Math.round((s.final - s.inicial) * 100) / 100) + '</div></div>' : "") +
+        (s.conferido ? "" : '<div class="ext-saldo-obs">Os saldos do extrato não bateram em todos os pontos: confira com o banco.</div>') + '</div>';
+    });
+    return itens.length ? '<div class="ext-saldos">' + itens.join("") + '</div>' : "";
+  }
+
   function telaAnalise(a) {
     var max = a.cats[0] ? a.cats[0].total : 1;
     var barras = a.cats.map(function (c) {
@@ -300,7 +314,7 @@ window.VHG_EXTRATOS = (function () {
     var parc = a.parcelas.length ? '<div class="bloco ext-bloco"><div class="eyebrow" style="letter-spacing:.22em">COMPRAS PARCELADAS</div><h3>O que ainda vem nas próximas faturas</h3><table class="ext-mini"><tr><th>COMPRA</th><th>PARCELA</th><th class="v">VALOR</th><th class="v">FALTA PAGAR</th></tr>' +
       a.parcelas.slice(0, 12).map(function (p) { return '<tr><td>' + esc(p.t.descricao) + '</td><td class="c">' + p.t.parcela.atual + ' de ' + p.t.parcela.total + '</td><td class="v">' + brl(-p.t.valor) + '</td><td class="v">' + brl(p.restante) + '</td></tr>'; }).join("") +
       '<tr class="tot"><td>Total</td><td></td><td></td><td class="v">' + brl(a.totalParcelasFuturas) + '</td></tr></table></div>' : "";
-    return '<div class="ext-periodo">' + esc(periodo(a)) + '</div>' + kpis(a) +
+    return '<div class="ext-periodo">' + esc(periodo(a)) + '</div>' + kpis(a) + saldosConta() +
       '<div class="bloco ext-bloco"><div class="eyebrow" style="letter-spacing:.22em">POR CATEGORIA</div><h3>Para onde foi o dinheiro</h3><div class="ext-barras">' + barras + '</div><div class="pequeno" style="margin-top:12px">Clique numa categoria para ver os lançamentos e trocar a categoria de qualquer um deles.</div></div>' +
       meses +
       (a.destaques.length ? '<div class="bloco ext-bloco"><div class="eyebrow" style="letter-spacing:.22em">LEITURA AUTOMÁTICA</div><h3>O que chama atenção</h3><div class="ext-insights">' + a.destaques.map(function (d) { return '<div class="ext-insight"><div class="t">' + d.t + '</div>' + d.h + '</div>'; }).join("") + '</div></div>' : "") +
@@ -542,7 +556,7 @@ window.VHG_EXTRATOS = (function () {
     var a = C.analisar(estado.trans);
     return {
       cliente: estado.cliente.trim(), analise: a, periodo: periodo(a), trans: estado.trans,
-      arquivos: estado.arquivos.map(function (f) { return { nome: f.nome, banco: f.info.banco, tipo: f.info.tipo, n: f.info.transacoes.length, conferencia: f.info.conferencia }; }),
+      arquivos: estado.arquivos.map(function (f) { return { nome: f.nome, banco: f.info.banco, tipo: f.info.tipo, n: f.info.transacoes.length, conferencia: f.info.conferencia, saldos: f.info.saldos || null }; }),
       regras: C.regrasDoUsuario(), geradoEm: new Date()
     };
   }
