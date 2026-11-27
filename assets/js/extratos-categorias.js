@@ -119,7 +119,10 @@
         if (c === "Pagamento de fatura" && t.tipoDoc === "cartao" && t.valor < 0) continue;
         // valor positivo numa categoria de gasto (ex.: crédito parcial de uma loja) é devolução
         if (t.valor > 0 && !NAO_GASTO[c] && c !== "Transferências" && c !== "Saques") c = "Estornos e créditos";
-        return { categoria: c, regra: todas[i][0], doUsuario: i < (usuario || []).length };
+        var doUsuario = i < (usuario || []).length;
+        // regra genérica (PIX, TED, transferência) perde para a categoria que o próprio banco imprimiu
+        if (!doUsuario && t.dica && t.dicaBanco && /^(PIX|TED|DOC|TRANSF)/.test(chave(todas[i][0]).trim()) && !(t.valor > 0 && !NAO_GASTO[t.dica])) return { categoria: t.dica, regra: "categoria informada pelo banco" };
+        return { categoria: c, regra: todas[i][0], doUsuario: doUsuario };
       }
     }
     if (t.pagamento) return { categoria: "Pagamento de fatura", regra: null };
