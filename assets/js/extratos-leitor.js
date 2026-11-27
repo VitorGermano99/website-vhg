@@ -116,6 +116,30 @@
     return achado;
   }
 
+  // Coluna "Categoria" que alguns bancos imprimem (ex.: BTG): faixa de x entre o título e o próximo título
+  function colunaCategoria(words, tol) {
+    var faixa = null;
+    linhas(words, tol).some(function (l) {
+      if (l.w.length > 12) return false;
+      var i = -1;
+      l.w.forEach(function (w, k) { if (i < 0 && /^categoria/.test(norm(w.text))) i = k; });
+      if (i < 0 || !/descri|historico|transa|valor/.test(norm(l.txt))) return false;
+      var prox = l.w.filter(function (w) { return w.x0 > l.w[i].x1 + 4; }).sort(function (a, b) { return a.x0 - b.x0; })[0];
+      if (!prox) return false;
+      // títulos costumam ser centralizados: a coluna vai um pouco antes do título e termina logo depois dele
+      faixa = [l.w[i].x0 - 16, Math.min(l.w[i].x1 + 12, prox.x0 - 4)];
+      return true;
+    });
+    return faixa;
+  }
+  function dicaDe(txt) {
+    if (!txt) return null;
+    var t = norm(txt);
+    var todos = Object.assign({}, HINTS, HINTS_COLUNA);
+    var h = Object.keys(todos).sort(function (a, b) { return b.length - a.length; }).filter(function (k) { return t.indexOf(k) === 0; })[0];
+    return h ? todos[h] : null;
+  }
+
   // ── Tipo do documento e banco ───────────────────────────────
   var BANCOS = [
     ["Nubank", /nubank|nu pagamentos/], ["Itaú", /itau|ita[uú] cart/], ["Bradesco", /bradesco/], ["Santander", /santander/],
@@ -165,6 +189,8 @@
   var R_DENTRO = /^lan[cç]amentos|^transa[cç][oõ]es|^detalhamento|^despesas|^movimenta[cç]/;
   var R_RESUMO = /^(\(.\)\s*)?(total|saldo|valor total|subtotal|pagamento minimo|limite)\b/;
   var R_PAGAMENTO = /pagamento|pgto|pag fatura|pagto|pag\. fatura|pagamento recebido/;
+  // Categorias que o banco imprime numa coluna própria (só valem dentro dessa coluna)
+  var HINTS_COLUNA = { "seguro": "Seguros", "tarifa": "Tarifas e juros", "investimento": "Investimentos", "salario": "Receitas", "transferencia": "Transferências", "outra transferencia": "Transferências", "moradia": "Moradia", "transporte": "Transporte", "lazer": "Lazer e viagens", "viage": "Lazer e viagens", "mercado": "Mercado", "compras": "Compras", "pet": "Pets", "impostos": "Impostos e taxas", "cuidados pessoais": "Cuidados pessoais" };
   var HINTS = { "alimentacao": "Alimentação fora", "veiculos": "Transporte", "saude": "Saúde", "vestuario": "Compras", "turismo e entretenim": "Lazer e viagens", "hobby": "Lazer e viagens", "educacao": "Educação", "supermercados": "Mercado", "supermercado": "Mercado", "farmacia": "Saúde", "restaurante": "Alimentação fora", "combustivel": "Transporte" };
 
   // ── Leitura de um documento ──────────────────────────────────
@@ -177,12 +203,15 @@
     var inicio = tn.slice(0, 2500);
     var tipo = opcoes.tipo || (/fatura/.test(inicio) || (/vencimento/.test(tn) && /limite (total|de credito|disponivel)/.test(tn)) ? "cartao" : "conta");
     if (algumCab && tipo === "cartao" && !/fatura/.test(inicio)) tipo = "conta";
+    // "Extrato de conta corrente" no topo: é conta, mesmo citando "pagamento de fatura do cartão" nos lançamentos
+    if (!opcoes.tipo && /extrato (de |da )?(sua )?conta|conta corrente/.test(tn.slice(0, 400)) && !/fatura (do|de|da) (seu |sua )?cart/.test(tn.slice(0, 400))) tipo = "conta";
     var ref = dataReferencia(todoTexto);
     var trans = [], resumo = [];
     var ultimaData = null;
 
     paginas.forEach(function (pg, pi) {
       var cab = cabecalhoConta(pg.words, pg.tol) || (tipo === "conta" ? algumCab : null);
+      var colCat = colunaCategoria(pg.words, pg.tol);
       colunas(pg.width, pg.words, pg.tol).forEach(function (col) {
         var ws = pg.words.filter(function (w) { return w.x0 >= col[0] && w.x0 < col[1]; });
         var ls = linhas(ws, pg.tol), pular = false;
@@ -210,6 +239,14 @@
             corpo = w.slice(0, iv);
           } else return;
 
+          // hora logo depois da data ("10h44", "10:44")
+          corpo = corpo.filter(function (x) { return !/^\d{1,2}[:hH]\d{2}(:\d{2})?$/.test(x.text); });
+          // coluna "Categoria" do próprio banco: vira dica, não descrição
+          var dicaBanco = null;
+          if (colCat) {
+            var cw = corpo.filter(function (x) { return x.x0 >= colCat[0] && x.x0 < colCat[1]; });
+            if (cw.length && cw.length < corpo.length) { dicaBanco = cw.map(function (x) { return x.text; }).join(" "); corpo = corpo.filter(function (x) { return cw.indexOf(x) < 0; }); }
+          }
           var negSinal = false;
           // sinal solto antes do valor, com ou sem "R$" no meio ("- R$ 981,77")
           var fim = corpo.length;
@@ -220,6 +257,11 @@
           }).map(function (x) { return x.text; }).join(" ").replace(/\s+/g, " ").trim();
           if (R_RESUMO.test(norm(desc))) {
             if (/saldo anterior|saldo inicial/.test(norm(desc))) resumo.push({ txt: l.txt, t: "saldo anterior", vals: [valorDe(w[iv].text)] });
+            // "Saldo diário" / "Saldo do dia" numa linha própria: é o saldo depois do último lançamento
+            else if (tipo === "conta" && /^saldo (do dia|diario|final do dia|ao final do dia|em conta)/.test(norm(desc)) && trans.length && trans[trans.length - 1].saldoApos === null) {
+              var sv = valorDe(w[iv].text); if (negSinal) sv = -Math.abs(sv);
+              trans[trans.length - 1].saldoApos = sv;
+            }
             return;
           }
 
@@ -258,7 +300,7 @@
           achados.push({ li: li, i: trans.length });
           trans.push({
             data: iso(data, ref), original: desc, descricao: desc, valor: valor === null ? null : Math.round(valor * 100) / 100,
-            parcela: parcela, saldoApos: saldoApos, pagina: pi + 1, dica: null, tipoDoc: tipo
+            parcela: parcela, saldoApos: saldoApos, pagina: pi + 1, dica: dicaDe(dicaBanco), dicaBanco: dicaBanco, tipoDoc: tipo
           });
         });
 
@@ -287,7 +329,19 @@
           if (!melhor) return;
           var tr = trans[melhor.a.i];
           if (tipo !== "conta" || /^data\b|historico|lancamento|descri/.test(t) || l.txt.length > 60) return;
-          tr.original = (melhor.acima ? l.txt + " " + tr.original : tr.original + " " + l.txt).trim();
+          var txtL = l.txt;
+          if (colCat) {
+            // pedaço da coluna "Categoria" quebrado em duas linhas ("Outra / transferência")
+            var cw = l.w.filter(function (x) { return x.x0 >= colCat[0] && x.x0 < colCat[1]; });
+            if (cw.length) {
+              var ct = cw.map(function (x) { return x.text; }).join(" ");
+              tr.dicaBanco = melhor.acima ? (ct + " " + (tr.dicaBanco || "")).trim() : ((tr.dicaBanco || "") + " " + ct).trim();
+              tr.dica = dicaDe(tr.dicaBanco);
+              txtL = l.w.filter(function (x) { return cw.indexOf(x) < 0; }).map(function (x) { return x.text; }).join(" ");
+              if (!txtL) return;
+            }
+          }
+          tr.original = (melhor.acima ? txtL + " " + tr.original : tr.original + " " + txtL).trim();
           tr.descricao = tr.original;
         });
       });
@@ -463,6 +517,7 @@
     "alimentacao saude educacao vestuario veiculos turismo entretenimento entretenim hobby supermercado supermercados restaurante restaurantes " +
     "combustivel farmacia diversos servicos lazer viagem viagens moradia transporte " +
     "a o as os ao aos de da do das dos e em no na nos nas para por ate entre com sem sua seu suas seus desta deste dessa desse esta este essa esse " +
+    "categoria categorias hora horas diario diaria contas transferencias pagamentos investimentos impostos salario pessoais pet pets mercados " +
     "mes meses dia dias folha pagina via ou que se ja nao sim um uma n no. nr num " +
     "itau bradesco santander nubank nu btg pactual caixa banco bancos brasil inter c6 xp sicoob sicredi mercado pago picpay original safra bank " +
     "visa mastercard master elo amex hipercard platinum gold black infinite signature grafite internacional personnalite uniclass prime select " +
@@ -476,6 +531,7 @@
     if (/^\d{1,2}\/\d{1,2}(\/\d{2}|\/\d{4})?$/.test(nucleo)) return t;      // data ou parcela
     if (/^(19|20)\d{2}$/.test(nucleo)) return t;                              // ano
     if (/^\d{1,2}$/.test(nucleo) && +nucleo <= 31) return t;                   // dia ("18 OUT")
+    if (/^\d{1,2}[:hH]\d{2}(:\d{2})?$/.test(nucleo)) return t;                   // hora
     if (/^[-−–+]?(R\$|US\$)?[-−–]?$/.test(t)) return t;                       // sinal e moeda soltos
     if (LIVRES[norm(nucleo).replace(/[^a-z0-9]/g, "")] && !/\d/.test(nucleo)) return t;
     if (/^[-−–]?[0.,]+$/.test(nucleo)) return t;                                // zero
