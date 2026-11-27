@@ -524,6 +524,7 @@ window.VHG_EXTRATOS = (function () {
     if (cli) cli.addEventListener("input", function () { estado.cliente = cli.value; });
     on("[data-baixar]", "click", async function (e, b) {
       var tipo = b.dataset.baixar, S = window.VHG_EXTRATOS_SAIDAS;
+      if (!estado.trans.length) { render(); alertaStatus("Os lançamentos não estão mais carregados. Envie os arquivos de novo."); return; }
       b.disabled = true; alertaStatus("Gerando o arquivo…");
       try {
         var dados = dadosSaida();
@@ -561,8 +562,11 @@ window.VHG_EXTRATOS = (function () {
     };
   }
 
-  // Ao sair da página, não sobra nada na memória da aba.
-  window.addEventListener("pagehide", function () { estado = novoEstado(); });
+  // Ao fechar a página, não sobra nada na memória da aba. No celular a página também
+  // "sai" ao abrir um download ou trocar de app (persisted = true): aí os dados ficam,
+  // senão a tela continuaria mostrando a análise e o PDF sairia vazio.
+  window.addEventListener("pagehide", function (e) { if (!e.persisted) estado = novoEstado(); });
+  window.addEventListener("pageshow", function (e) { if (e.persisted && el) render(); });
 
   return {
     montar: function (alvo) { el = alvo; render(); },
