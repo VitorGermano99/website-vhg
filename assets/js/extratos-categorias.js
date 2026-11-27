@@ -188,7 +188,10 @@
     });
 
     // Parcelas: o que ainda falta pagar
-    var parcelas = gastos.filter(function (t) { return t.parcela && !t.estornado; }).map(function (t) {
+    // Se a mesma compra aparece com duas parcelas na fatura (ex.: 2/3 e 3/3), só a mais adiantada conta para o que falta
+    var maiorParc = {};
+    gastos.forEach(function (t) { if (!t.parcela) return; var k = chaveComercio(t.original) + "|" + t.valor + "|" + t.parcela.total; maiorParc[k] = Math.max(maiorParc[k] || 0, t.parcela.atual); });
+    var parcelas = gastos.filter(function (t) { return t.parcela && !t.estornado && maiorParc[chaveComercio(t.original) + "|" + t.valor + "|" + t.parcela.total] === t.parcela.atual; }).map(function (t) {
       return { t: t, faltam: t.parcela.total - t.parcela.atual, restante: r2(-t.valor * (t.parcela.total - t.parcela.atual)) };
     }).sort(function (a, b) { return b.restante - a.restante; });
     var totalParcelasFuturas = r2(parcelas.reduce(function (a, p) { return a + p.restante; }, 0));

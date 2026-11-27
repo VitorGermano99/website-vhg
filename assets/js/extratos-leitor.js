@@ -17,7 +17,7 @@
   var MESES = { JAN: 1, FEV: 2, MAR: 3, ABR: 4, MAI: 5, JUN: 6, JUL: 7, AGO: 8, SET: 9, OUT: 10, NOV: 11, DEZ: 12 };
   var R_DATA = /^(\d{1,2})\/(\d{1,2})(?:\/(\d{2}|\d{4}))?$/;
   var R_VAL = /^[-−–]?(?:R\$)?[-−–]?(?:\d{1,3}(?:\.\d{3})+|\d+),\d{2}[-−–]?[CD]?$/;
-  var R_PARC = /(?:^|\s|[A-Za-z*])(\d{1,2})\s?\/\s?(\d{1,2})$/;
+  var R_PARC = /(?:^|\s|[A-Za-z*])\(?(\d{1,2})\s?\/\s?(\d{1,2})\)?$/;
   var SINAIS = { "-": 1, "−": 1, "–": 1, "-R$": 1, "−R$": 1, "–R$": 1 };
 
   function sem(s) { return String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, ""); }
@@ -142,6 +142,14 @@
       var dt2 = new Date(+m[3], MESES[m[2].toUpperCase()] - 1, +m[1]);
       if (!ref || dt2 > ref) ref = dt2;
     }
+    var temData = !!ref;
+    // "fatura de dezembro de 2026" (faturas que só trazem dia/mês nas datas)
+    var MES_LONGO = { janeiro: 1, fevereiro: 2, marco: 3, abril: 4, maio: 5, junho: 6, julho: 7, agosto: 8, setembro: 9, outubro: 10, novembro: 11, dezembro: 12 };
+    var r3 = /\b(janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro) de (\d{4})\b/gi;
+    while (!temData && (m = r3.exec(sem(txt)))) {
+      var dt3 = new Date(+m[2], MES_LONGO[m[1].toLowerCase()] - 1, 28);
+      if (+m[2] > 2000 && +m[2] < 2100 && (!ref || dt3 > ref)) ref = dt3;
+    }
     return ref || new Date();
   }
   function iso(d, ref) {
@@ -203,7 +211,10 @@
           } else return;
 
           var negSinal = false;
-          if (corpo.length && SINAIS[corpo[corpo.length - 1].text]) { negSinal = true; corpo = corpo.slice(0, -1); }
+          // sinal solto antes do valor, com ou sem "R$" no meio ("- R$ 981,77")
+          var fim = corpo.length;
+          while (fim && /^(R\$|US\$)$/.test(corpo[fim - 1].text)) fim--;
+          if (fim && SINAIS[corpo[fim - 1].text]) { negSinal = true; corpo = corpo.slice(0, fim - 1).concat(corpo.slice(fim)); }
           var desc = corpo.filter(function (x) {
             return x.text !== "R$" && x.text !== "US$" && !/^•+$/.test(x.text) && !/^\d{4}$/.test(x.text) && !/^\d{6,}$/.test(x.text);
           }).map(function (x) { return x.text; }).join(" ").replace(/\s+/g, " ").trim();
@@ -240,7 +251,7 @@
           var parcela = null, m = R_PARC.exec(desc);
           if (m && +m[1] >= 1 && +m[1] <= +m[2] && +m[2] >= 2 && +m[2] <= 48) {
             parcela = { atual: +m[1], total: +m[2] };
-            desc = desc.slice(0, desc.length - (m[1] + "/" + m[2]).length).replace(/[\s/]+$/, "").trim();
+            desc = desc.replace(/\(?\d{1,2}\s?\/\s?\d{1,2}\)?$/, "").replace(/[\s/(]+$/, "").trim();
             if (!desc) desc = (corpo.map(function (x) { return x.text; }).join(" "));
           }
           if (!desc && !(tipo === "conta" && cab)) return;
@@ -298,6 +309,14 @@
     // Mês de competência: na fatura, o mês do vencimento; no extrato, o mês de cada lançamento
     var venc = /vencimento[\s\S]{0,90}?(\d{2})\/(\d{2})\/(\d{4})/.exec(tn) || /vencimento[\s\S]{0,40}?(\d{1,2}) (jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez) (\d{4})/.exec(tn);
     var mesFatura = venc ? venc[3] + "-" + String(MESES[String(venc[2]).toUpperCase()] || +venc[2]).padStart(2, "0") : null;
+    if (!mesFatura) {
+      // vencimento sem ano ("Vencimento: 01/12"): usa o ano da data de referência
+      var v2 = /vencimento\W{0,3}(\d{2})\/(\d{2})(?!\/\d)/.exec(tn);
+      if (v2 && +v2[2] >= 1 && +v2[2] <= 12) {
+        var ya = ref.getFullYear(); if (+v2[2] - (ref.getMonth() + 1) > 6) ya--; else if ((ref.getMonth() + 1) - +v2[2] > 6) ya++;
+        mesFatura = ya + "-" + v2[2];
+      }
+    }
     trans.forEach(function (t) { t.competencia = tipo === "cartao" && mesFatura ? mesFatura : t.data.slice(0, 7); });
 
     // Parcela antiga (ex.: 12/12) sem ano na fatura: a compra foi feita uns (atual - 1) meses antes da fatura,
